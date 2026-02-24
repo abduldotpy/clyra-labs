@@ -1,0 +1,213 @@
+# CodeRabbit Configuration
+# Docs: https://docs.coderabbit.ai/guides/configure-coderabbit
+
+language: "en-US"
+
+reviews:
+  # "assertive" = thorough, catches everything. "chill" = lenient.
+  profile: "assertive"
+
+  # Automatically request changes when issues are found
+  request_changes_workflow: true
+
+  # Add a high-level summary to every PR
+  high_level_summary: true
+
+  # Show review status as a commit status check
+  review_status: true
+
+  # Auto-review PRs (including drafts marked ready)
+  auto_review:
+    enabled: true
+    drafts: false
+    ignore_title_keywords:
+      - "WIP"
+      - "DO NOT MERGE"
+      - "SKIP REVIEW"
+
+  # ──────────────────────────────────────────────
+  # Per-path custom review instructions
+  # ──────────────────────────────────────────────
+  path_instructions:
+
+    # ── Python source files ──────────────────────
+    - path: "**/*.py"
+      instructions: |
+        You are a senior Python and AI engineer acting as a mentor. Your goal is
+        not just to find problems, but to TEACH the author WHY the practice
+        matters and HOW to fix it properly. Be specific, cite the relevant PEP
+        or guideline, and always show a corrected code snippet.
+
+        ## Python Best Practices — check every PR for:
+
+        ### Code Quality
+        - PEP 8 compliance: naming (snake_case for vars/functions, PascalCase for
+          classes, UPPER_SNAKE_CASE for module-level constants), line length
+          (≤ 88 chars, Black-compatible), blank lines between functions/classes.
+        - Type annotations on every function signature (parameters + return type).
+          Explain that type hints make code self-documenting and enable static
+          analysis tools like mypy.
+        - Docstrings on every public function, class, and module (Google style or
+          NumPy style — be consistent). A one-liner is fine for simple functions.
+        - Avoid mutable default arguments (e.g., def f(x=[]) is a classic Python
+          footgun — explain why and show the None-guard pattern).
+        - Prefer f-strings over .format() or % formatting.
+        - Use pathlib.Path instead of raw os.path string manipulation.
+        - Use context managers (with) for file I/O and any resource that needs
+          cleanup.
+
+        ### Error Handling
+        - Never use bare `except:` — always catch specific exception types.
+        - Never silently swallow exceptions. Log or re-raise.
+        - Validate environment variables at startup; raise a descriptive error if
+          required keys are missing rather than failing cryptically at runtime.
+
+        ### Imports
+        - Group imports: stdlib → third-party → local, separated by blank lines
+          (isort convention).
+        - No wildcard imports (from module import *).
+        - Remove unused imports.
+
+        ### Security
+        - Never hardcode API keys, secrets, or credentials. They must come from
+          environment variables or a secrets manager.
+        - Flag any use of os.getenv() without a fallback check — if the value is
+          required, the absence should raise an explicit error, not silently pass
+          None to an API call.
+
+        ## AI Engineering Best Practices — check every PR for:
+
+        ### LangChain / LCEL
+        - Use LangChain Expression Language (LCEL) pipe syntax (prompt | model |
+          parser) for chain composition — it is more readable and supports
+          streaming/batching natively.
+        - Do not reassign a variable to a different object on the same line
+          (e.g., model_image = model_text = ... assigns both names to the same
+          object — this is almost always a bug).
+        - Separate concerns: model definitions, prompt templates, chains, and I/O
+          should be in clearly distinct sections or modules.
+        - Avoid putting chain.invoke() / chain.stream() at module level — wrap
+          execution logic in functions or a main() guard.
+
+        ### Prompt Engineering
+        - Prompt templates should be clearly separated from business logic.
+        - System prompts should be concise and unambiguous. Flag prompts that
+          contain contradictory instructions.
+        - Use structured output (Pydantic models + .with_structured_output()) when
+          the downstream code parses the model's response — avoids fragile string
+          parsing.
+
+        ### Model Configuration
+        - Temperature=0.0 is correct for deterministic tasks; explain when a
+          non-zero temperature is appropriate.
+        - Model names should be constants (MODEL_TEXT = "gemini-2.5-flash") not
+          inline strings scattered through the code.
+        - Always handle potential API errors and rate limits gracefully.
+
+        ### Observability
+        - LangSmith tracing should be configured at the entry point, not scattered
+          across files.
+        - Use descriptive run names and metadata tags so traces are meaningful.
+
+        ### General AI Engineering
+        - Keep prompts version-controlled and treat them like code.
+        - Outputs from LLMs are untrusted input — validate before using downstream.
+        - Never log full model responses if they may contain PII.
+
+    # ── Environment / config files ───────────────
+    - path: "**/.env*"
+      instructions: |
+        Flag immediately if a .env file containing real secrets is committed.
+        .env files should never be tracked by git. Only .env.example (with
+        placeholder values) should exist in the repository.
+
+    # ── GitHub Actions / CI ──────────────────────
+    - path: ".github/**"
+      instructions: |
+        Review CI/CD workflows for:
+        - Pinned action versions (use commit SHA, not @main or @latest) to
+          prevent supply-chain attacks.
+        - Secrets accessed via ${{ secrets.NAME }}, never hardcoded.
+        - Minimal permissions principle for GITHUB_TOKEN.
+
+    # ── Requirements / dependency files ──────────
+    - path: "requirements*.txt"
+      instructions: |
+        - All dependencies should be pinned to exact versions (==) in
+          requirements.txt for reproducibility.
+        - Flag unpinned or overly broad version ranges.
+        - Suggest using a lockfile approach (pip-tools / uv) for better
+          dependency management.
+
+    - path: "pyproject.toml"
+      instructions: |
+        - Verify [project] metadata is complete (name, version, description,
+          authors, python version constraint).
+        - Dev dependencies should be in [dependency-groups] or [project.optional-dependencies].
+
+# ──────────────────────────────────────────────
+# Git hygiene instructions (applied to every PR)
+# ──────────────────────────────────────────────
+  commit_message_instructions: |
+    Enforce Conventional Commits (https://www.conventionalcommits.org).
+    Every commit message must follow this format:
+
+      <type>(<optional scope>): <short description>
+
+      [optional body]
+
+      [optional footer]
+
+    Allowed types:
+      feat     – a new feature
+      fix      – a bug fix
+      docs     – documentation changes only
+      style    – formatting, missing semicolons, etc. (no logic change)
+      refactor – code change that is neither a fix nor a feature
+      test     – adding or correcting tests
+      chore    – build process, dependency updates, tooling
+      perf     – performance improvement
+      ci       – CI/CD configuration changes
+
+    Rules:
+    - The short description must be in imperative mood, lowercase, no trailing
+      period. Good: "add image generation chain". Bad: "Added image generation."
+    - Subject line ≤ 72 characters.
+    - If a commit message is vague (e.g., "fix", "update", "wip", "changes"),
+      request a more descriptive message and explain what information is missing.
+    - Breaking changes must include "BREAKING CHANGE:" in the footer.
+
+    TEACH: Explain that good commit messages serve as a project changelog and
+    make git bisect, blame, and log much more useful for the whole team.
+
+  branch_name_instructions: |
+    Enforce the following branch naming convention:
+
+      <type>/<short-kebab-case-description>
+
+    Allowed types:
+      feature/   – new feature work         (e.g., feature/image-generation-chain)
+      fix/        – bug fixes               (e.g., fix/null-api-key-crash)
+      hotfix/     – urgent production fix   (e.g., hotfix/broken-pipeline)
+      chore/      – maintenance, tooling    (e.g., chore/update-langchain-deps)
+      docs/       – documentation only      (e.g., docs/add-readme)
+      refactor/   – code restructuring      (e.g., refactor/separate-model-config)
+      test/       – test additions          (e.g., test/chain-unit-tests)
+      ci/         – CI/CD changes           (e.g., ci/add-lint-workflow)
+      release/    – release preparation     (e.g., release/v1.0.0)
+
+    Rules:
+    - Use kebab-case (lowercase, hyphens). No underscores, no spaces.
+    - Keep descriptions short but meaningful (2–5 words).
+    - Never work directly on main or master — all changes must go through a
+      feature branch and PR.
+    - Branch names like "patch", "test1", "my-branch", or "fix123" should be
+      flagged with an explanation of why descriptive names matter.
+
+    TEACH: Explain that consistent branch naming makes it instantly clear what
+    work is happening across the team, simplifies automation (e.g., auto-labeling
+    PRs), and improves the project's git history readability.
+
+chat:
+  # Allow @coderabbitai commands in PR comments
+  auto_reply: true
